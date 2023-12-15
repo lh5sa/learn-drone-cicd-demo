@@ -7,7 +7,8 @@ export default defineConfig({
   themeConfig: {
     // https://vitepress.dev/reference/default-theme-config
     nav: [
-      { text: "Home", link: "/learn-drone-cicd-demo/" },
+      { text: "Home", link: "" },
+      // { text: "Home", link: "/learn-drone-cicd-demo/" },
       { text: "Examples", link: "/markdown-examples" },
     ],
 

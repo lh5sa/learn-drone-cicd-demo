@@ -3,20 +3,19 @@ kind: pipeline
 type: docker
 name: deploy
 
+# push 代码的时候就触发这个流水线
 trigger:
   event:
     - push
 
-workspace:
-  path: /drone-workspace
-
+# 定义缓存目录(放到宿主机的 /tmp/drone_cache 目录下)
 volumes:
   - name: cache
     host:
       path: /tmp/drone_cache
 
 steps:
-  # use caches
+  # 使用缓存(如果有的话)
   - name: restore-cache
     image: drillster/drone-volume-cache
     pull: if-not-exists
@@ -27,9 +26,8 @@ steps:
       restore: true
       mount:
         - ./node_modules
-        - ~/.local/share/pnpm/store
 
-  # install dependences and compile source code
+  # 安装依赖 编译源码 压缩打包
   - name: build-and-compress-source-code
     image: node:18
     pull: if-not-exists
@@ -41,7 +39,7 @@ steps:
       - tar -cjvf dist.bz2 ./run.sh ./docs/.vitepress/dist
       - echo "===== build completed ====="
 
-  # make caches
+  # 制作缓存(需要指定缓存目录, 不要每次去下载 node_modules)
   - name: rebuild-cache
     image: drillster/drone-volume-cache
     pull: if-not-exists
@@ -53,13 +51,13 @@ steps:
       restore: false
       mount:
         - ./node_modules
-        - ~/.local/share/pnpm/store
 
-  # upload zip to server
+  # 将文件上传到服务器
   - name: upload-file-to-server
     image: appleboy/drone-scp
     pull: if-not-exists
-    branch: main
+    when:
+      branch: main # 只有在 push 到 main 分支才执行
     settings:
     settings:
       host:
@@ -74,10 +72,12 @@ steps:
       source: ./dist.bz2
       target: ~/learn-drone-cicd-demo
 
+  # 连接上服务器然后执行一些脚本
   - name: deploy-to-server
     image: appleboy/drone-ssh
     pull: if-not-exists
-    branch: main # 只有在 push 到 main 分支的时候才执行
+    when:
+      branch: main # 只有在push 到 main 分支的时候才执行
     settings:
       host:
         from_secret: ssh_host
@@ -94,13 +94,3 @@ steps:
         - pwd
         - ls -al
         - echo "===== deploy completed ====="
-
-  - name: deploy-to-github-pages
-    image: plugins/gh-pages
-    branch: github-pages
-    settings:
-      username:
-        from_secret: github_username
-      password: 
-        from_secret: github_password
-      pages_directory: ./docs/.vitessages/dist

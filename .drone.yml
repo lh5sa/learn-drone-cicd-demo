@@ -1,0 +1,99 @@
+---
+kind: pipeline
+type: docker
+name: default
+
+trigger:
+  event:
+    - push
+  branch:
+    - main
+
+workspace:
+  path: /drone-workspace
+
+clone:
+  depth: 1
+
+volumes:
+  - name: cache
+    host:
+      path: /tmp/drone_cache
+
+steps:
+  # use caches
+  - name: restore-cache
+    image: drillster/drone-volume-cache
+    pull: if-not-exists
+    volumes:
+      - name: cache
+        path: /cache
+    settings:
+      restore: true
+      mount:
+        - ./node_modules
+        - ~/.local/share/pnpm/store
+
+  # install dependences and compile source code
+  - name: build-and-compress-source-code
+    image: node:18
+    pull: if-not-exists
+    commands:
+      - npm install -g pnpm
+      - pnpm install --no-frozen-lockfile
+      - pnpm docs:build
+      - ls -al
+      - tar -cjvf dist.bz2 ./run.sh ./docs/.vitepress/dist
+      - echo "===== build completed ====="
+
+  # make caches
+  - name: rebuild-cache
+    image: drillster/drone-volume-cache
+    pull: if-not-exists
+    volumes:
+      - name: cache
+        path: /cache
+    settings:
+      rebuild: true
+      restore: false
+      mount:
+        - ./node_modules
+        - ~/.local/share/pnpm/store
+
+  # upload zip to server
+  - name: upload-file-to-server
+    image: appleboy/drone-scp
+    pull: if-not-exists
+    settings:
+    settings:
+      host:
+        from_secret: ssh_host
+      username:
+        from_secret: ssh_user
+      password:
+        from_secret: ssh_pass
+      port: 
+        from_secret: ssh_port
+      command_timeout: 2m
+      source: ./dist.bz2
+      target: ~/learn-drone-cicd-demo
+
+  - name: deploy-to-server
+    image: appleboy/drone-ssh
+    pull: if-not-exists
+    settings:
+      host:
+        from_secret: ssh_host
+      username:
+        from_secret: ssh_user
+      password:
+        from_secret: ssh_pass
+      port: 
+        from_secret: ssh_port
+      command_timeout: 2m
+      script:
+        - cd ~/learn-drone-cicd-demo
+        - tar -xjvf ./dist.bz2
+        - pwd
+        - ls -al
+        - echo "===== deploy completed ====="
